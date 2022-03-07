@@ -1,0 +1,72 @@
+---
+- hosts: sonar
+  become: true
+  tasks:
+    - name: install dependency
+      apt:
+        name: "{{item}}"
+        state: present
+        update_cache: yes
+      loop:
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - gnupg-agent
+        - software-properties-common
+
+    - name: add GPG Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: add docker repository 
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu bionic stable
+        state: present
+
+    - name: install docker
+      apt:
+        name: "{{item}}"
+        state: latest
+        update_cache: yes
+      loop:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io  
+
+    - name: docker service start verify
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Install docker-compose from official github repo
+      get_url:
+        url : https://github.com/docker/compose/releases/download/1.29.2/docker-compose-Linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: 'u+x,g+x'
+
+    - name: change host name
+      command: hostnamectl set-hostname sonar.tool.danlix.infra
+
+    - name: change vm-max-map-count
+      sysctl:
+       name: vm.max_map_count
+       value: '262144'
+       sysctl_set: yes
+       state: present
+       reload: yes
+      
+
+    - name: create sonar-docker folder 
+      file:
+        path: /opt/sonar-docker
+        state: directory
+  
+    - name: Copy docker compse
+      copy: src=sonarfile/docker-compose.yml dest=/opt/sonar-docker/docker-compose.yml
+
+    - name: deploy Docker Compose 
+      shell:
+        cmd: "docker-compose up -d"
+        chdir: /opt/sonar-docker
